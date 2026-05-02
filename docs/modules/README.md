@@ -25,6 +25,7 @@
 | Workflow | Validator | [validator.md](validator.md) |
 | Workflow | Reflector | [reflector.md](reflector.md) |
 | Workflow | Scheduler | [scheduler.md](scheduler.md) |
+| Workflow | Persistence (checkpointer) | [persistence.md](persistence.md) |
 | Agents   | Worker Agents (общее) | [agents.md](agents.md) |
 | Agents   | Research Agent | [agents-research.md](agents-research.md) |
 | Agents   | Architect Agent | [agents-architect.md](agents-architect.md) |
