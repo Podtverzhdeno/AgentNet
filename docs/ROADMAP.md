@@ -32,7 +32,7 @@
 
 - [ ] Vault + secret resolvers через MCP.
 - [x] Per‑tenant изоляция (Phase 3.A): `tenant_id` в `SessionRequest` / `GraphState`, `TenantResolver` (Static / Header / Bearer‑token) в FastAPI, фильтры `GET /api/sessions`, ownership‑чек на `/state` и `/approve`, `--tenant` в CLI, тенантные хелперы в `persistence`.
-- [ ] Audit log с WORM‑хранилищем.
+- [x] Audit log с WORM‑хранилищем (Phase 3.C): `agentnet/audit/` — `AuditEvent` с hash‑chain (`sha256(prev || canonical)`), `AuditSink` Protocol + `InMemoryAuditSink` / `FileAuditSink` (JSONL, `O_APPEND`), `AuditRecorder` thread‑safe и продолжает chain после рестарта; FastAPI пишет `session.start` / `session.approve`.
 - [x] PII guard и output filter (Phase 3.B): regex‑детектор + `Redactor` + `ScrubbedLLMClient` оборачивает любой `LLMClient`.
 - [ ] Sandbox для code‑exec: Firecracker / Kata.
 

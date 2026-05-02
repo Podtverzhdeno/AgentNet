@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from .. import __version__
+from ..audit import AuditRecorder, NewEvent
 from ..auth import StaticTenantResolver, TenantResolver
 from ..graph import build_graph, get_session_state
 from ..llm import LLMClient, make_llm_client
@@ -280,6 +281,7 @@ def make_app(
     llm: LLMClient | None = None,
     llm_spec: str | None = None,
     tenant_resolver: TenantResolver | None = None,
+    audit_recorder: AuditRecorder | None = None,
 ) -> FastAPI:
     """Create a FastAPI app.
 
@@ -297,12 +299,14 @@ def make_app(
     bus = SessionEventBus()
     resolved_llm = llm if llm is not None else make_llm_client(llm_spec)
     resolver: TenantResolver = tenant_resolver or StaticTenantResolver(DEFAULT_TENANT)
+    recorder = audit_recorder
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.bus = bus
         app.state.llm = resolved_llm
         app.state.tenant_resolver = resolver
+        app.state.audit_recorder = recorder
         if checkpointer is not None:
             app.state.checkpointer = checkpointer
             yield
@@ -323,6 +327,28 @@ def make_app(
                 status_code=401,
                 detail={"error": {"code": "unauthorized", "message": str(exc)}},
             ) from exc
+
+    def _audit(
+        request: Request,
+        *,
+        tenant: str,
+        actor: str,
+        action: str,
+        resource: str,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        rec: AuditRecorder | None = getattr(request.app.state, "audit_recorder", None)
+        if rec is None:
+            return
+        rec.record(
+            NewEvent(
+                actor=actor,
+                action=action,
+                resource=resource,
+                tenant_id=tenant,
+                payload=payload or {},
+            )
+        )
 
     @app.get("/api/healthz", response_model=HealthResponse)
     async def healthz() -> HealthResponse:
@@ -392,6 +418,19 @@ def make_app(
             mode=body.mode,
             llm=getattr(active_llm, "model", None),
         )
+        _audit(
+            request,
+            tenant=tenant,
+            actor=tenant,
+            action="session.start",
+            resource=thread_id,
+            payload={
+                "task": body.task,
+                "mode": body.mode,
+                "max_iterations": body.max_iterations,
+                "score_threshold": body.score_threshold,
+            },
+        )
         return StartSessionResponse(session_id=thread_id)
 
     @app.get("/api/session/{session_id}/state")
@@ -459,6 +498,18 @@ def make_app(
                 "decision": body.decision,
                 "comment": body.comment,
                 "tenant_id": tenant,
+            },
+        )
+        _audit(
+            request,
+            tenant=tenant,
+            actor=tenant,
+            action="session.approve",
+            resource=session_id,
+            payload={
+                "step_id": body.step_id,
+                "decision": body.decision,
+                "comment": body.comment,
             },
         )
         return ApprovalResponse(session_id=session_id, step_id=body.step_id, decision=body.decision)
