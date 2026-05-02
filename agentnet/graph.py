@@ -25,12 +25,13 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 
 from .agents import (
-    analytics_node,
-    architect_node,
-    research_node,
-    security_node,
+    make_analytics_node,
+    make_architect_node,
+    make_research_node,
+    make_security_node,
 )
 from .aggregator import aggregator_node
+from .llm import LLMClient, make_llm_client
 from .observability import get_logger
 from .orchestrator import orchestrator_node
 from .persistence import make_checkpointer
@@ -52,21 +53,27 @@ def _route_after_validate(state: GraphState) -> str:
     return "reflect"
 
 
-def build_graph(checkpointer: BaseCheckpointSaver[Any] | None = None) -> Any:
+def build_graph(
+    checkpointer: BaseCheckpointSaver[Any] | None = None,
+    *,
+    llm: LLMClient | None = None,
+) -> Any:
     """Compile the LangGraph state machine.
 
-    ``checkpointer`` is optional. Pass one to enable session persistence
-    (state is written after every node) and resumability via
-    ``thread_id``. Without it the graph runs purely in-memory.
+    ``checkpointer`` enables persistence; ``llm`` plumbs a real LLM
+    client into the worker agents (Phase 2.A). When ``llm`` is ``None``
+    or a :class:`MockLLMClient`, every agent uses its deterministic
+    Phase‑1 mock body so existing tests stay reproducible without API
+    keys.
     """
 
     g: StateGraph[GraphState, Any, GraphState, GraphState] = StateGraph(GraphState)
     g.add_node("orchestrator", orchestrator_node)
     g.add_node("planner", planner_node)
-    g.add_node("research", research_node)
-    g.add_node("architect", architect_node)
-    g.add_node("security", security_node)
-    g.add_node("analytics", analytics_node)
+    g.add_node("research", make_research_node(llm))  # type: ignore[arg-type]
+    g.add_node("architect", make_architect_node(llm))  # type: ignore[arg-type]
+    g.add_node("security", make_security_node(llm))  # type: ignore[arg-type]
+    g.add_node("analytics", make_analytics_node(llm))  # type: ignore[arg-type]
     g.add_node("aggregate", aggregator_node)
     g.add_node("validate", validator_node)
     g.add_node("reflect", reflector_node)
@@ -98,6 +105,8 @@ def run_session(
     thread_id: str | None = None,
     checkpointer_uri: str | None = None,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
+    llm: LLMClient | None = None,
+    llm_spec: str | None = None,
 ) -> SessionResult:
     """Run a session synchronously and return a :class:`SessionResult`.
 
@@ -113,12 +122,20 @@ def run_session(
         when ``checkpointer`` is provided directly.
     checkpointer:
         Pre-built checkpointer. Useful in tests.
+    llm:
+        Pre-built LLM client. Mutually exclusive with ``llm_spec``.
+    llm_spec:
+        ``provider[:model]`` string parsed by
+        :func:`agentnet.llm.make_llm_client`. ``None`` falls back to
+        ``$AGENTNET_LLM`` and finally to ``MockLLMClient``.
     """
 
     if checkpointer is None and checkpointer_uri is not None:
         checkpointer = make_checkpointer(checkpointer_uri)
+    if llm is None:
+        llm = make_llm_client(llm_spec)
 
-    graph = build_graph(checkpointer=checkpointer)
+    graph = build_graph(checkpointer=checkpointer, llm=llm)
 
     thread_id = thread_id or f"sess-{uuid.uuid4().hex[:12]}"
     initial: GraphState = {

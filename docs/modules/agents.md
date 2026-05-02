@@ -88,3 +88,21 @@ class Agent(Protocol):
 
 - [planner.md](planner.md), [mcp-gateway.md](mcp-gateway.md), [sandbox.md](sandbox.md), [aggregator.md](aggregator.md), [validator.md](validator.md).
 - Конкретные агенты: [agents-research.md](agents-research.md), [agents-architect.md](agents-architect.md), [agents-security.md](agents-security.md), [agents-analytics.md](agents-analytics.md).
+- Pluggable LLM clients: [llm.md](llm.md).
+
+---
+
+## Реализация (Phase 2.A)
+
+Каждый агент сейчас экспортирует две сущности:
+
+- `<role>_node(state)` — **детерминированная** Phase‑1 заглушка (без LLM, без сети). Используется в тестах и в CI.
+- `make_<role>_node(llm)` — фабрика, привязывающая агента к
+  `agentnet.llm.LLMClient`. Если `llm is None` или это
+  `MockLLMClient`, фабрика возвращает ту же детерминированную ноду
+  (поэтому `pytest -q` зелёный без API‑ключей).
+
+`build_graph(llm=...)` пробрасывает клиент во все четыре worker‑агента
+сразу. `run_session(..., llm_spec="anthropic:claude-3-5-haiku-20241022")` —
+самый короткий способ переключить ран на реальный LLM. Подробнее про
+сами клиенты — [llm.md](llm.md).

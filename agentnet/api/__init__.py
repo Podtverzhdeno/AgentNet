@@ -38,6 +38,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .. import __version__
 from ..graph import build_graph, get_session_state
+from ..llm import LLMClient, make_llm_client
 from ..observability import get_logger
 from ..persistence import async_checkpointer, list_thread_ids
 from ..state import GraphState, SessionRequest
@@ -164,10 +165,11 @@ async def _run_session_streaming(
     thread_id: str,
     checkpointer: BaseCheckpointSaver[Any],
     bus: SessionEventBus,
+    llm: LLMClient | None = None,
 ) -> None:
     """Run a session via ``graph.astream`` and publish per-node events."""
 
-    graph = build_graph(checkpointer=checkpointer)
+    graph = build_graph(checkpointer=checkpointer, llm=llm)
     initial: GraphState = {
         "idea": request.task,
         "iteration": 1,
@@ -254,6 +256,8 @@ def make_app(
     *,
     checkpointer_uri: str | None = None,
     checkpointer: BaseCheckpointSaver[Any] | None = None,
+    llm: LLMClient | None = None,
+    llm_spec: str | None = None,
 ) -> FastAPI:
     """Create a FastAPI app.
 
@@ -266,18 +270,19 @@ def make_app(
     """
 
     bus = SessionEventBus()
+    resolved_llm = llm if llm is not None else make_llm_client(llm_spec)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        app.state.bus = bus
+        app.state.llm = resolved_llm
         if checkpointer is not None:
             app.state.checkpointer = checkpointer
-            app.state.bus = bus
             yield
             return
         uri = checkpointer_uri or os.environ.get("AGENTNET_CHECKPOINTER") or "memory"
         async with async_checkpointer(uri) as cp:
             app.state.checkpointer = cp
-            app.state.bus = bus
             yield
 
     app = FastAPI(title="AgentNet", version=__version__, lifespan=lifespan)
@@ -304,8 +309,14 @@ def make_app(
             score_threshold=body.score_threshold,
         )
         cp: BaseCheckpointSaver[Any] = request.app.state.checkpointer
-        background_tasks.add_task(_run_session_streaming, body, thread_id, cp, bus)
-        log.info("api.session.start", thread_id=thread_id, mode=body.mode)
+        active_llm: LLMClient | None = getattr(request.app.state, "llm", None)
+        background_tasks.add_task(_run_session_streaming, body, thread_id, cp, bus, active_llm)
+        log.info(
+            "api.session.start",
+            thread_id=thread_id,
+            mode=body.mode,
+            llm=getattr(active_llm, "model", None),
+        )
         return StartSessionResponse(session_id=thread_id)
 
     @app.get("/api/session/{session_id}/state")
