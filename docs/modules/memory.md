@@ -75,3 +75,57 @@
 ## Связанные модули
 
 - [skills.md](skills.md), [agents-research.md](agents-research.md), [orchestrator.md](orchestrator.md).
+
+---
+
+## Реализация (Phase 2.E)
+
+`agentnet/memory/` теперь содержит реальный векторный слой:
+
+| Файл           | Содержание |
+|----------------|-----------|
+| `types.py`     | `MemoryRecord`, `MemoryHit` (Pydantic). |
+| `embeddings.py`| `Embedder` Protocol + `HashEmbedder` (детерминированный, без сети) + `OpenAIEmbedder` (`/v1/embeddings`) + `OllamaEmbedder` (`/api/embeddings`). |
+| `store.py`     | `VectorStore` Protocol + `InMemoryVectorStore` (cosine‑similarity in‑process, потокобезопасный). |
+| `qdrant.py`    | `QdrantVectorStore` поверх REST API Qdrant (`/collections/.../points/{search,delete}`). Авто‑создаёт коллекцию по нужной размерности. |
+| `factory.py`   | `make_vector_store(spec, *, embedder=, collection=, base_url=, api_key=)` — резолв `AGENTNET_MEMORY` / `QDRANT_URL` / `QDRANT_API_KEY` / `QDRANT_COLLECTION`. |
+| `legacy.py`    | Старый `InMemoryStore` / `MemoryItem` (substring search) — оставлен для обратной совместимости. |
+
+### Тенантная изоляция
+
+Все три операции (`upsert / search / delete`) принимают `tenant`:
+
+- `InMemoryVectorStore.search` фильтрует кандидатов по `record.tenant` **до** косинусного скоринга.
+- `QdrantVectorStore.search` отправляет фильтр `must: [{key: "tenant", match: {value: tenant}}]` в Qdrant.
+- `QdrantVectorStore.delete` накладывает тот же фильтр + список id, поэтому удалить чужой `id` нельзя даже зная его.
+
+### Использование
+
+```python
+from agentnet.memory import make_vector_store, MemoryRecord
+
+# CI / dev (без зависимостей):
+store = make_vector_store(None)                 # → InMemoryVectorStore + HashEmbedder
+
+# с Qdrant (env QDRANT_URL/QDRANT_API_KEY/QDRANT_COLLECTION):
+store = make_vector_store("qdrant")
+
+# или явные kwargs:
+store = make_vector_store(
+    "qdrant",
+    base_url="https://qdrant.example",
+    collection="agentnet",
+    api_key="qd-...",
+)
+
+store.upsert([MemoryRecord(text="JWT review notes", tenant="acme")])
+hits = store.search("auth token", tenant="acme", top_k=3)
+```
+
+### Что **не** входит в Phase 2.E
+
+- Подключение `VectorStore` в Research Agent (RAG) — сделаем в Phase 2.A.2.
+- TTL и right‑to‑erasure (GDPR) — Phase 3.
+- Hybrid search (BM25 + vector) — Phase 3.
+- Multi‑modal эмбеддинги (image/audio) — Phase 3.
+- HTTP‑эндпоинты `/api/memory/*` — Phase 3 (сейчас слой используется in‑process).
