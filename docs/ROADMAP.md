@@ -22,7 +22,7 @@
 
 - [ ] Architect Agent, Security Agent, Analytics Agent.
 - [ ] Aggregator с разрешением конфликтов.
-- [ ] Long‑term memory (Qdrant) и базовый RAG.
+- [x] Long‑term memory: `VectorStore` Protocol + InMemoryVectorStore + Qdrant‑адаптер + embedder’ы (Hash / OpenAI / Ollama) с тенантной изоляцией (Phase 2.E). RAG‑интеграция в агентов — Phase 2.A.2.
 - [x] MCP Gateway с YAML‑конфигом, RBAC, approval‑gate, rate‑limit, аудитом и in‑process / HTTP транспортами (Phase 2.B).
 - [ ] Sandbox runtime: Docker + gVisor.
 - [ ] Human‑in‑the‑loop checkpoints в UI/CLI.
