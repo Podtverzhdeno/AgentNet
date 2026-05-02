@@ -33,7 +33,7 @@
 - [ ] Vault + secret resolvers через MCP.
 - [ ] Per‑tenant изоляция (namespace, DB role, vector‑prefix).
 - [ ] Audit log с WORM‑хранилищем.
-- [ ] PII guard и output filter.
+- [x] PII guard и output filter (Phase 3.B): regex‑детектор + `Redactor` + `ScrubbedLLMClient` оборачивает любой `LLMClient`.
 - [ ] Sandbox для code‑exec: Firecracker / Kata.
 
 ## Phase 4 — Skills & автоматизация
