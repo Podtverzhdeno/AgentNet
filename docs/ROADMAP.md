@@ -14,6 +14,7 @@
 - [x] Один Worker (Research Agent) с mock‑MCP. *(в Phase 1 сразу 4 worker'а: Research, Architect, Security, Analytics)*
 - [x] State persistence (SQLite через `langgraph-checkpoint-sqlite`; Postgres — Phase 3).
 - [x] Минимальный CLI (`session start`, `session list`, `session get`).
+- [x] HTTP API + SSE стрим (`POST /api/session/start`, `GET /api/session/{id}/state`, `GET /api/session/{id}/stream`, `POST /api/session/{id}/approve`).
 - [ ] Минимальный UI (просмотр графа и стрим обновлений).
 - [ ] Базовая observability (OTEL traces, Prometheus counters). *(пока только structlog; OTEL/Prometheus — Phase 3)*
 

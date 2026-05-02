@@ -25,7 +25,15 @@ agentnet session start "Спроектировать аналитическую 
 agentnet graph     # вывод нод и рёбер графа
 agentnet version
 
-# 4. (опционально) включить pre-commit хуки
+# 4. Поднять HTTP API + SSE (Phase 2.D)
+uvicorn agentnet.api:app --reload
+# затем в другом терминале:
+curl -X POST http://127.0.0.1:8000/api/session/start \
+  -H 'content-type: application/json' \
+  -d '{"task": "design analytics", "thread_id": "demo"}'
+curl -N http://127.0.0.1:8000/api/session/demo/stream
+
+# 5. (опционально) включить pre-commit хуки
 pre-commit install
 ```
 

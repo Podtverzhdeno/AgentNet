@@ -37,6 +37,7 @@
 | Edge     | Sandbox | [sandbox.md](sandbox.md) |
 | Edge     | UI | [ui.md](ui.md) |
 | Edge     | CLI | [cli.md](cli.md) |
+| Edge     | HTTP API | [api.md](api.md) |
 | Platform | Observability | [observability.md](observability.md) |
 
 См. также:

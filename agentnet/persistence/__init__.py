@@ -19,12 +19,16 @@ with multi-tenant deployment.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import aiosqlite
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 DEFAULT_CHECKPOINT_DIR = Path.home() / ".agentnet"
 DEFAULT_CHECKPOINT_FILE = "checkpoints.sqlite"
@@ -68,6 +72,54 @@ def make_checkpointer(uri: str | None = None) -> BaseCheckpointSaver[Any]:
     return disk_saver
 
 
+def _async_uri_to_path(uri: str) -> str:
+    """Translate a URI used by :func:`make_checkpointer` to a file path.
+
+    Returns the literal ``":memory:"`` for in-memory URIs.
+    """
+
+    normalized = (uri or "memory").strip()
+    if normalized in {"sqlite::memory:", "sqlite:///:memory:", ":memory:"}:
+        return ":memory:"
+    if normalized.startswith("sqlite:///"):
+        return normalized.removeprefix("sqlite:///")
+    if normalized.startswith("sqlite://"):
+        return normalized.removeprefix("sqlite://")
+    return normalized
+
+
+@asynccontextmanager
+async def async_checkpointer(uri: str | None) -> AsyncIterator[BaseCheckpointSaver[Any]]:
+    """Yield an *async* checkpointer compatible with the same URIs as
+    :func:`make_checkpointer`.
+
+    Empty / ``"memory"`` → :class:`MemorySaver` (it implements both the
+    sync and async checkpoint protocols).
+
+    Anything else is treated as SQLite and wrapped in an
+    :class:`AsyncSqliteSaver` over an :mod:`aiosqlite` connection. The
+    connection is closed when the context manager exits.
+    """
+
+    normalized = (uri or "memory").strip()
+    if normalized in {"", "memory"}:
+        yield MemorySaver()
+        return
+
+    path = _async_uri_to_path(normalized)
+    if path != ":memory:":
+        # The work below touches the local filesystem synchronously, but
+        # connection bring-up is one-shot at app startup so a brief
+        # blocking call is fine and avoids pulling in trio/anyio.path.
+        target = Path(path).expanduser()  # noqa: ASYNC240
+        target.parent.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
+        path = str(target)
+    async with aiosqlite.connect(path) as conn:
+        saver = AsyncSqliteSaver(conn)
+        await saver.setup()
+        yield saver
+
+
 def list_thread_ids(checkpointer: BaseCheckpointSaver[Any]) -> list[str]:
     """Return distinct ``thread_id`` values stored by a SQLite checkpointer.
 
@@ -86,6 +138,7 @@ def list_thread_ids(checkpointer: BaseCheckpointSaver[Any]) -> list[str]:
 __all__ = [
     "DEFAULT_CHECKPOINT_DIR",
     "DEFAULT_CHECKPOINT_FILE",
+    "async_checkpointer",
     "default_checkpoint_uri",
     "list_thread_ids",
     "make_checkpointer",
