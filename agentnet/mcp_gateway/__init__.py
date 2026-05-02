@@ -1,45 +1,54 @@
-"""MCP Gateway — mock client.
+"""MCP Gateway — single trust boundary between agents and external tools.
 
-The real Gateway (FastMCP / Prefect Horizon) handles RBAC, audit and
-secret resolution (see ``docs/modules/mcp-gateway.md``). The mock here
-provides a :class:`MockMCPGateway` that registers and dispatches local
-Python callables, so worker agents can be developed and tested without a
-live network.
+Phase 2.B introduces a real :class:`MCPGateway` with YAML‑driven RBAC,
+multi‑backend transports (in‑process and HTTP), per‑(role, tool) rate
+limiting and a JSON‑Lines audit log.
+
+The legacy :class:`MockMCPGateway` is preserved for the agent unit tests
+that predated this work — it is now a thin convenience wrapper around
+:class:`InProcessTransport` and :class:`AuditLog`.
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from typing import Any
 
+from .audit import AuditLog, ToolCall
+from .config import (
+    BackendConfig,
+    GatewayConfig,
+    RoleConfig,
+    ToolConfig,
+    load_config,
+)
+from .gateway import (
+    MCPGateway,
+    ToolApprovalRequiredError,
+    ToolNotAuthorizedError,
+    ToolNotFoundError,
+    ToolRateLimitedError,
+    ToolTimeoutError,
+)
+from .ratelimit import SlidingWindowRateLimiter
+from .transport import HTTPTransport, InProcessTransport, Transport
 
-@dataclass
-class ToolCall:
-    tool: str
-    params: dict[str, Any]
-    duration_ms: float
-    success: bool
-    result: Any = None
-    error: str | None = None
 
-
-class ToolNotAuthorizedError(RuntimeError):
-    """Raised when a role is not allowed to call the requested tool."""
-
-
-class ToolNotFoundError(RuntimeError):
-    """Raised when the tool isn't registered with the gateway."""
-
-
-@dataclass
 class MockMCPGateway:
-    """In-process MCP gateway used in tests and the local CLI."""
+    """In‑process gateway used in agent / orchestrator tests.
 
-    rbac: dict[str, list[str]] = field(default_factory=dict)
-    _tools: dict[str, Callable[..., Any]] = field(default_factory=dict)
-    _audit: list[ToolCall] = field(default_factory=list)
+    Kept for backwards compatibility with Phase 1 tests. New code should
+    construct a real :class:`MCPGateway` (typically via
+    :meth:`MCPGateway.from_config`). This shim mimics the original
+    ``rbac``/``audit`` properties and supports the same
+    ``allow``/``register``/``call`` operations.
+    """
+
+    def __init__(self) -> None:
+        self.rbac: dict[str, list[str]] = {}
+        self._tools: dict[str, Callable[..., Any]] = {}
+        self._audit = AuditLog(path=None)
 
     def register(self, name: str, fn: Callable[..., Any]) -> None:
         self._tools[name] = fn
@@ -48,30 +57,40 @@ class MockMCPGateway:
         self.rbac.setdefault(role, []).extend(tools)
 
     def call(self, *, role: str, tool: str, params: dict[str, Any] | None = None) -> Any:
-        params = params or {}
+        params = dict(params or {})
         if tool not in self._tools:
+            self._audit.record(
+                ToolCall(
+                    tool=tool,
+                    role=role,
+                    params=params,
+                    duration_ms=0.0,
+                    success=False,
+                    error="denied:tool_not_found",
+                )
+            )
             raise ToolNotFoundError(tool)
         if tool not in self.rbac.get(role, []):
+            self._audit.record(
+                ToolCall(
+                    tool=tool,
+                    role=role,
+                    params=params,
+                    duration_ms=0.0,
+                    success=False,
+                    error="denied:not_authorized",
+                )
+            )
             raise ToolNotAuthorizedError(f"role {role!r} cannot call {tool!r}")
         started = time.perf_counter()
         try:
             result = self._tools[tool](**params)
+        except Exception as exc:  # noqa: BLE001 — re-raise after audit
             duration_ms = (time.perf_counter() - started) * 1000
-            self._audit.append(
+            self._audit.record(
                 ToolCall(
                     tool=tool,
-                    params=params,
-                    duration_ms=duration_ms,
-                    success=True,
-                    result=result,
-                )
-            )
-            return result
-        except Exception as exc:  # noqa: BLE001 — we intentionally capture all
-            duration_ms = (time.perf_counter() - started) * 1000
-            self._audit.append(
-                ToolCall(
-                    tool=tool,
+                    role=role,
                     params=params,
                     duration_ms=duration_ms,
                     success=False,
@@ -79,15 +98,41 @@ class MockMCPGateway:
                 )
             )
             raise
+        duration_ms = (time.perf_counter() - started) * 1000
+        self._audit.record(
+            ToolCall(
+                tool=tool,
+                role=role,
+                params=params,
+                duration_ms=duration_ms,
+                success=True,
+                result=result,
+            )
+        )
+        return result
 
     @property
     def audit(self) -> list[ToolCall]:
-        return list(self._audit)
+        return self._audit.entries
 
 
 __all__ = [
+    "AuditLog",
+    "BackendConfig",
+    "GatewayConfig",
+    "HTTPTransport",
+    "InProcessTransport",
+    "MCPGateway",
     "MockMCPGateway",
+    "RoleConfig",
+    "SlidingWindowRateLimiter",
+    "ToolApprovalRequiredError",
     "ToolCall",
+    "ToolConfig",
     "ToolNotAuthorizedError",
     "ToolNotFoundError",
+    "ToolRateLimitedError",
+    "ToolTimeoutError",
+    "Transport",
+    "load_config",
 ]
