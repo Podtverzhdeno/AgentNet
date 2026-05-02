@@ -64,7 +64,11 @@ class GraphState(TypedDict, total=False):
     max_iterations: int
     score_threshold: float
     session_id: str
+    tenant_id: str
     mode: Mode
+
+
+DEFAULT_TENANT = "default"
 
 
 class SessionRequest(BaseModel):
@@ -74,6 +78,10 @@ class SessionRequest(BaseModel):
     mode: Mode = "auto"
     max_iterations: int = Field(3, ge=1, le=20)
     score_threshold: float = Field(0.8, ge=0.0, le=1.0)
+    tenant_id: str = Field(
+        default=DEFAULT_TENANT,
+        description="Tenant identifier used for isolation across sessions / memory.",
+    )
 
 
 class SessionResult(BaseModel):

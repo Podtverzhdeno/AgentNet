@@ -18,8 +18,14 @@ from rich.table import Table
 
 from .graph import build_graph, get_session_state, run_session
 from .mcp_gateway import MCPGateway, load_config
-from .persistence import default_checkpoint_uri, list_thread_ids, make_checkpointer
-from .state import SessionRequest
+from .persistence import (
+    default_checkpoint_uri,
+    get_thread_tenant,
+    list_thread_ids,
+    list_thread_ids_for_tenant,
+    make_checkpointer,
+)
+from .state import DEFAULT_TENANT, SessionRequest
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="AgentNet CLI")
 session_app = typer.Typer(help="Manage AgentNet sessions")
@@ -43,6 +49,14 @@ def _resolve_persist(option: str | None) -> str | None:
     return option
 
 
+def _resolve_tenant(option: str | None) -> str:
+    """CLI flag → ``AGENTNET_TENANT`` env → ``"default"``."""
+
+    if option:
+        return option
+    return os.environ.get("AGENTNET_TENANT") or DEFAULT_TENANT
+
+
 @session_app.command("start")
 def session_start(
     task: str = typer.Argument(..., help="Idea or task description"),
@@ -50,6 +64,11 @@ def session_start(
     max_iterations: int = typer.Option(3, help="Maximum reflection iterations"),
     score_threshold: float = typer.Option(0.8, help="Score required to terminate"),
     thread_id: str | None = typer.Option(None, "--thread-id", help="Reuse a specific thread id"),
+    tenant: str | None = typer.Option(
+        None,
+        "--tenant",
+        help="Tenant id used for isolation. Defaults to AGENTNET_TENANT or 'default'.",
+    ),
     persist: str | None = typer.Option(
         None,
         "--persist",
@@ -75,6 +94,7 @@ def session_start(
         mode=mode,  # type: ignore[arg-type]
         max_iterations=max_iterations,
         score_threshold=score_threshold,
+        tenant_id=_resolve_tenant(tenant),
     )
     result = run_session(
         request,
@@ -102,6 +122,16 @@ def session_start(
 
 @session_app.command("list")
 def session_list(
+    tenant: str | None = typer.Option(
+        None,
+        "--tenant",
+        help="Restrict listing to a tenant id. Defaults to AGENTNET_TENANT or all tenants.",
+    ),
+    all_tenants: bool = typer.Option(
+        False,
+        "--all-tenants",
+        help="Bypass tenant filter and list every persisted session.",
+    ),
     persist: str | None = typer.Option(
         None,
         "--persist",
@@ -113,11 +143,30 @@ def session_list(
 
     uri = _resolve_persist(persist) or default_checkpoint_uri()
     checkpointer = make_checkpointer(uri)
-    threads = list_thread_ids(checkpointer)
+    if all_tenants:
+        active_tenant: str | None = None
+        threads = list_thread_ids(checkpointer)
+    else:
+        active_tenant = _resolve_tenant(tenant)
+        threads = list_thread_ids_for_tenant(checkpointer, active_tenant)
     if json_output:
-        typer.echo(json.dumps({"checkpointer": uri, "threads": threads}, indent=2))
+        typer.echo(
+            json.dumps(
+                {
+                    "checkpointer": uri,
+                    "tenant_id": active_tenant,
+                    "threads": threads,
+                },
+                indent=2,
+            )
+        )
         return
-    table = Table(title=f"Sessions ({uri})")
+    title = (
+        f"Sessions ({uri})"
+        if active_tenant is None
+        else f"Sessions ({uri}) — tenant={active_tenant}"
+    )
+    table = Table(title=title)
     table.add_column("thread_id", overflow="fold")
     for tid in threads:
         table.add_row(tid)
@@ -127,6 +176,11 @@ def session_list(
 @session_app.command("get")
 def session_get(
     thread_id: str = typer.Argument(..., help="Session / thread id"),
+    tenant: str | None = typer.Option(
+        None,
+        "--tenant",
+        help="Tenant id; mismatch returns 404. Defaults to AGENTNET_TENANT.",
+    ),
     persist: str | None = typer.Option(
         None,
         "--persist",
@@ -140,6 +194,19 @@ def session_get(
     state = get_session_state(thread_id, checkpointer)
     if state is None:
         typer.echo(json.dumps({"error": f"no checkpoint for {thread_id}"}))
+        raise typer.Exit(code=1)
+    requested = _resolve_tenant(tenant)
+    owner = get_thread_tenant(thread_id, checkpointer) or DEFAULT_TENANT
+    if owner != requested:
+        typer.echo(
+            json.dumps(
+                {
+                    "error": "session_not_found",
+                    "thread_id": thread_id,
+                    "tenant_id": requested,
+                }
+            )
+        )
         raise typer.Exit(code=1)
     typer.echo(json.dumps(state, indent=2, default=str, ensure_ascii=False))
 

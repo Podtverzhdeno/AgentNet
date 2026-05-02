@@ -135,11 +135,52 @@ def list_thread_ids(checkpointer: BaseCheckpointSaver[Any]) -> list[str]:
     return [row[0] for row in rows]
 
 
+def get_thread_tenant(thread_id: str, checkpointer: BaseCheckpointSaver[Any]) -> str | None:
+    """Return the ``tenant_id`` recorded in the persisted state, or ``None``.
+
+    Used by the API layer to enforce tenant isolation on individual
+    ``GET /state`` / ``POST /approve`` requests. Returns ``None`` when
+    there's no checkpoint for the thread (so the caller can return 404).
+    """
+
+    from langchain_core.runnables import RunnableConfig
+
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    tup = checkpointer.get_tuple(config)
+    if tup is None:
+        return None
+    state = tup.checkpoint.get("channel_values", {})
+    if isinstance(state, dict):
+        tenant = state.get("tenant_id")
+        if isinstance(tenant, str):
+            return tenant
+    return None
+
+
+def list_thread_ids_for_tenant(checkpointer: BaseCheckpointSaver[Any], tenant: str) -> list[str]:
+    """List thread ids that belong to *tenant*.
+
+    Iterates :func:`list_thread_ids` and filters by the persisted
+    ``tenant_id`` field. Threads that don't carry the field at all are
+    treated as belonging to ``"default"`` for backward compatibility
+    with sessions created before Phase 3.A.
+    """
+
+    out: list[str] = []
+    for tid in list_thread_ids(checkpointer):
+        recorded = get_thread_tenant(tid, checkpointer) or "default"
+        if recorded == tenant:
+            out.append(tid)
+    return sorted(out)
+
+
 __all__ = [
     "DEFAULT_CHECKPOINT_DIR",
     "DEFAULT_CHECKPOINT_FILE",
     "async_checkpointer",
     "default_checkpoint_uri",
+    "get_thread_tenant",
     "list_thread_ids",
+    "list_thread_ids_for_tenant",
     "make_checkpointer",
 ]
