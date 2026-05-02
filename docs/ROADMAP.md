@@ -20,7 +20,8 @@
 
 ## Phase 2 — Полный рабочий цикл
 
-- [ ] Architect Agent, Security Agent, Analytics Agent.
+- [x] Pluggable LLM clients (Anthropic / OpenAI / Ollama / Mock) + интеграция с агентами и CLI/API (Phase 2.A).
+- [ ] Architect Agent, Security Agent, Analytics Agent на реальных LLM (промпты / few‑shot).
 - [ ] Aggregator с разрешением конфликтов.
 - [ ] Long‑term memory (Qdrant) и базовый RAG.
 - [x] MCP Gateway с YAML‑конфигом, RBAC, approval‑gate, rate‑limit, аудитом и in‑process / HTTP транспортами (Phase 2.B).

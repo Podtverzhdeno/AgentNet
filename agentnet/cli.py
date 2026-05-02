@@ -58,6 +58,14 @@ def session_start(
             "Default: AGENTNET_CHECKPOINTER env or no persistence."
         ),
     ),
+    llm: str | None = typer.Option(
+        None,
+        "--llm",
+        help=(
+            "LLM provider spec, e.g. 'mock', 'anthropic:claude-3-5-haiku-20241022', "
+            "'openai:gpt-4o-mini', 'ollama:llama3'. Default: AGENTNET_LLM env or 'mock'."
+        ),
+    ),
     json_output: bool = typer.Option(False, "--json", help="Emit JSON instead of pretty output"),
 ) -> None:
     """Run a session locally and print its final state."""
@@ -72,6 +80,7 @@ def session_start(
         request,
         thread_id=thread_id,
         checkpointer_uri=_resolve_persist(persist),
+        llm_spec=llm,
     )
     if json_output:
         typer.echo(result.model_dump_json(indent=2))

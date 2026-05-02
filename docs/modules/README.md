@@ -33,6 +33,7 @@
 | Agents   | Analytics Agent | [agents-analytics.md](agents-analytics.md) |
 | Memory   | Memory | [memory.md](memory.md) |
 | Memory   | Skills | [skills.md](skills.md) |
+| Memory   | LLM Clients | [llm.md](llm.md) |
 | Edge     | MCP Gateway | [mcp-gateway.md](mcp-gateway.md) |
 | Edge     | Sandbox | [sandbox.md](sandbox.md) |
 | Edge     | UI | [ui.md](ui.md) |
