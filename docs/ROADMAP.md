@@ -23,7 +23,7 @@
 - [ ] Architect Agent, Security Agent, Analytics Agent.
 - [ ] Aggregator с разрешением конфликтов.
 - [ ] Long‑term memory (Qdrant) и базовый RAG.
-- [ ] MCP Gateway (Prefect Horizon или собственный) с RBAC.
+- [x] MCP Gateway с YAML‑конфигом, RBAC, approval‑gate, rate‑limit, аудитом и in‑process / HTTP транспортами (Phase 2.B).
 - [ ] Sandbox runtime: Docker + gVisor.
 - [ ] Human‑in‑the‑loop checkpoints в UI/CLI.
 

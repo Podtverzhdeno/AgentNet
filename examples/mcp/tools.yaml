@@ -1,0 +1,42 @@
+# Sample MCP gateway config — see docs/modules/mcp-gateway.md.
+#
+# Usage:
+#   agentnet mcp validate examples/mcp/tools.yaml
+#   agentnet mcp tools ResearchAgent --config examples/mcp/tools.yaml
+#
+# The "remote" backend points at example.com and won't respond unless you
+# stand up a real MCP server. The "local" backend has no concrete tools
+# in this YAML — register them programmatically via
+#   MCPGateway.from_config(path, in_process_tools={"local": {"echo": ...}}).
+
+audit_log: ./audit.jsonl
+default_timeout_seconds: 30
+default_rate_limit_rpm: 60
+
+backends:
+  local:
+    transport: in_process
+  remote:
+    transport: http
+    base_url: https://mcp.example.com
+    headers:
+      X-Service: agentnet
+    timeout_seconds: 10
+
+tools:
+  echo:
+    backend: local
+  publish:
+    backend: local
+    require_approval: true
+  fetch_docs:
+    backend: remote
+    timeout_seconds: 8
+    rate_limit_rpm: 30
+
+roles:
+  ResearchAgent:
+    allow: [echo, fetch_docs]
+  AnalyticsAgent:
+    allow: [echo]
+    approval: [publish]

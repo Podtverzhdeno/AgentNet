@@ -17,12 +17,15 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .graph import build_graph, get_session_state, run_session
+from .mcp_gateway import MCPGateway, load_config
 from .persistence import default_checkpoint_uri, list_thread_ids, make_checkpointer
 from .state import SessionRequest
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="AgentNet CLI")
 session_app = typer.Typer(help="Manage AgentNet sessions")
 app.add_typer(session_app, name="session")
+mcp_app = typer.Typer(help="Inspect and exercise the MCP gateway")
+app.add_typer(mcp_app, name="mcp")
 
 console = Console()
 
@@ -130,6 +133,57 @@ def session_get(
         typer.echo(json.dumps({"error": f"no checkpoint for {thread_id}"}))
         raise typer.Exit(code=1)
     typer.echo(json.dumps(state, indent=2, default=str, ensure_ascii=False))
+
+
+@mcp_app.command("validate")
+def mcp_validate(
+    config: str = typer.Argument(..., help="Path to gateway YAML config"),
+) -> None:
+    """Load and validate a gateway YAML config, summarising what it permits."""
+
+    cfg = load_config(config)
+    table = Table(title=f"Gateway ({config})")
+    table.add_column("section")
+    table.add_column("count", justify="right")
+    table.add_row("backends", str(len(cfg.backends)))
+    table.add_row("tools", str(len(cfg.tools)))
+    table.add_row("roles", str(len(cfg.roles)))
+    console.print(table)
+    for role, rcfg in cfg.roles.items():
+        console.print(f"[bold]{role}[/bold] allow={rcfg.allow!r} approval={rcfg.approval!r}")
+
+
+@mcp_app.command("tools")
+def mcp_tools(
+    role: str = typer.Argument(..., help="Role to query"),
+    config: str = typer.Option(..., "--config", help="Path to gateway YAML config"),
+) -> None:
+    """Print the tools accessible to *role* under *config*."""
+
+    gateway = MCPGateway.from_config(config)
+    tools = gateway.list_tools(role)
+    typer.echo(json.dumps({"role": role, "tools": tools}, indent=2))
+
+
+@mcp_app.command("call")
+def mcp_call(
+    tool: str = typer.Argument(..., help="Tool name"),
+    role: str = typer.Option(..., "--role", help="Calling role"),
+    config: str = typer.Option(..., "--config", help="Path to gateway YAML config"),
+    params: str = typer.Option("{}", "--params", help="JSON-encoded params"),
+    approve: bool = typer.Option(False, "--approve", help="Pass approval_decision='approve'"),
+) -> None:
+    """Invoke a tool through the gateway (HTTP transports require a live server)."""
+
+    gateway = MCPGateway.from_config(config)
+    parsed: dict[str, object] = json.loads(params or "{}")
+    result = gateway.call(
+        role=role,
+        tool=tool,
+        params=parsed,
+        approval_decision="approve" if approve else None,
+    )
+    typer.echo(json.dumps({"result": result}, indent=2, default=str, ensure_ascii=False))
 
 
 @app.command("version")

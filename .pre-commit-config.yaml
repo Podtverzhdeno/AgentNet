@@ -31,3 +31,5 @@ repos:
           - fastapi>=0.111
           - sse-starlette>=2.1
           - anyio>=4.4
+          - httpx>=0.27
+          - types-PyYAML

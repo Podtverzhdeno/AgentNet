@@ -112,3 +112,50 @@ roles:
 ## Связанные модули
 
 - [agents.md](agents.md), [sandbox.md](sandbox.md), [observability.md](observability.md).
+
+---
+
+## Реализация (Phase 2.B)
+
+`agentnet/mcp_gateway/` сейчас содержит:
+
+- `config.py` — Pydantic‑модели и `load_config(path)` для YAML (см. секцию [RBAC](#rbac)).
+- `transport.py` — `Transport` Protocol, `InProcessTransport` (registry of callables) и
+  `HTTPTransport` (POST `/mcp/call` per [API_CONTRACTS.md](../API_CONTRACTS.md)).
+- `ratelimit.py` — `SlidingWindowRateLimiter` (per‑(role, tool), per‑minute).
+- `audit.py` — `AuditLog` JSON‑Lines, потокобезопасный, `flush` после каждого
+  события, путь задаётся в YAML (`audit_log:`).
+- `gateway.py` — основной `MCPGateway` со следующим порядком проверок:
+
+  1. `tool ∈ tools` иначе `ToolNotFoundError`.
+  2. `tool ∈ role.allow ∪ role.approval` иначе `ToolNotAuthorizedError`.
+  3. Если требуется approval (флаг `require_approval=True` или
+     `tool ∈ role.approval`), `approval_decision` обязан быть `"approve"`.
+     Иначе `ToolApprovalRequiredError` (с `denied:approval_required` /
+     `denied:approval_rejected` в audit).
+  4. Rate limit per `(role, tool)`. Иначе `ToolRateLimitedError`.
+  5. Resolve `Transport`, `transport.call(tool, params, timeout=…)`.
+  6. Любой ответ или ошибка попадает в `AuditLog`.
+
+`MCPGateway.from_config(path, in_process_tools={...}, http_clients={...})` —
+основной билдер. Тесты передают `in_process_tools` (callable’ы) и
+`http_clients` (httpx.Client от `pytest-httpx`).
+
+`MockMCPGateway` сохранён как тонкая обёртка для совместимости со старыми
+тестами (Phase 1).
+
+## CLI
+
+```bash
+agentnet mcp validate path/to/tools.yaml
+agentnet mcp tools ResearchAgent --config tools.yaml
+agentnet mcp call echo --role ResearchAgent --config tools.yaml --params '{"x":1}'
+agentnet mcp call publish --role AnalyticsAgent --config tools.yaml --approve
+```
+
+## Что **не** входит в Phase 2.B
+
+- mTLS / OIDC / Vault (Phase 3).
+- PII‑detector / output‑filter (Phase 3).
+- Streaming‑ответы (Phase 3).
+- Replay / dedup идемпотентных вызовов.
