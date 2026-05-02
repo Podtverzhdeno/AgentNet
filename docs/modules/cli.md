@@ -1,5 +1,8 @@
 # CLI
 
+> **Phase 2.C update:** добавлены опции `--persist` / `--thread-id` и команды `session list`, `session get`. Persistence управляется флагом или переменной окружения `AGENTNET_CHECKPOINTER` (см. [persistence.md](persistence.md)).
+
+
 ## Назначение
 
 Терминальный интерфейс для разработчиков, аналитиков и для самих агентов («terminal‑first» интерфейс по аналогии с LangSmith CLI).

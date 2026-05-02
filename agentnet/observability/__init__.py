@@ -8,6 +8,7 @@ skeleton we just expose a configured :mod:`structlog` logger.
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Any
 
 import structlog
@@ -17,7 +18,8 @@ def configure_logging(level: str = "INFO") -> None:
     """Idempotently configure structlog + stdlib logging.
 
     ``run_session`` calls this once per process unless logging has already
-    been configured by the caller.
+    been configured by the caller. Logs are emitted to ``stderr`` so that
+    JSON / structured CLI output stays clean on ``stdout``.
     """
 
     if structlog.is_configured():
@@ -26,6 +28,7 @@ def configure_logging(level: str = "INFO") -> None:
     logging.basicConfig(
         level=level.upper(),
         format="%(message)s",
+        stream=sys.stderr,
     )
     structlog.configure(
         processors=[
@@ -37,7 +40,7 @@ def configure_logging(level: str = "INFO") -> None:
             structlog.dev.ConsoleRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, level.upper())),
-        logger_factory=structlog.PrintLoggerFactory(),
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
         cache_logger_on_first_use=True,
     )
 
