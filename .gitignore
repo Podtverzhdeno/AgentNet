@@ -3,16 +3,23 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+venv/
 .env
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tox/
+htmlcov/
+coverage.xml
+.coverage
+
+# Build
+build/
+dist/
 
 # Node
 node_modules/
 .next/
-dist/
-build/
 
 # IDE
 .idea/
@@ -24,6 +31,3 @@ Thumbs.db
 
 # Logs / artefacts
 *.log
-.coverage
-coverage.xml
-htmlcov/

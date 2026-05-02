@@ -4,7 +4,35 @@
 В основе — Stateful Orchestrator на базе [LangGraph](https://github.com/langchain-ai/langgraph) и набор специализированных агентов (Research, Architect, Security, Analytics …),
 каждый из которых может делегировать подзадачи субагентам, работать в изолированной песочнице и обращаться к внешним инструментам через защищённый MCP Gateway.
 
-> Этот репозиторий пока содержит **только архитектурную документацию**. Код будет добавляться модуль за модулем по мере реализации (см. [docs/ROADMAP.md](docs/ROADMAP.md)).
+> Phase 1 завершён: каркас Python‑пакета `agentnet/` с моками агентов и LangGraph workflow. Дальше — постепенная замена моков на реальные реализации (см. [docs/ROADMAP.md](docs/ROADMAP.md)).
+
+---
+
+## Quickstart
+
+```bash
+# 1. Создать окружение и установить пакет
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+# 2. Прогнать тесты, lint и mypy
+pytest -q
+ruff check . && ruff format --check .
+mypy agentnet tests
+
+# 3. Запустить локальную сессию через CLI
+agentnet session start "Спроектировать аналитическую платформу"
+agentnet graph     # вывод нод и рёбер графа
+agentnet version
+
+# 4. (опционально) включить pre-commit хуки
+pre-commit install
+```
+
+Скелет полностью in-process и не требует внешних сервисов: агенты, MCP Gateway,
+память и навыки сейчас реализованы как моки. Контракты (см. [`docs/`](docs/) и
+[`docs/modules/`](docs/modules/)) уже зафиксированы, поэтому замена моков на
+production-реализации не должна ломать остальной код.
 
 ---
 
