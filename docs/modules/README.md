@@ -35,6 +35,7 @@
 | Memory   | Skills | [skills.md](skills.md) |
 | Memory   | LLM Clients | [llm.md](llm.md) |
 | Security | PII Guard | [pii.md](pii.md) |
+| Security | Auth & Tenancy | [auth.md](auth.md) |
 | Edge     | MCP Gateway | [mcp-gateway.md](mcp-gateway.md) |
 | Edge     | Sandbox | [sandbox.md](sandbox.md) |
 | Edge     | UI | [ui.md](ui.md) |

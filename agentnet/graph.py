@@ -145,6 +145,7 @@ def run_session(
         "score_threshold": request.score_threshold,
         "mode": request.mode,
         "session_id": thread_id,
+        "tenant_id": request.tenant_id,
     }
 
     invoke_kwargs: dict[str, Any] = {}
